@@ -30,39 +30,19 @@ int main(int argc, char** argv) {
     }
     Img img = { .pixels = pixels, .width = width, .height = height };
 
-    Img blur = img_alloc(width, height);
-    gauss_filter(img, blur);
-    if (!stbi_write_png("out/gauss.png", blur.width, blur.height, 4, blur.pixels, blur.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/gauss.png\n");
-        return 1;
-    }
-
-    Img quantized = img_alloc(width, height);
-    quantize(blur, quantized);
-    if (!stbi_write_png("out/quantized.png", quantized.width, quantized.height, 4, quantized.pixels, quantized.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/quantized.png\n");
-        return 1;
-    }
-
-    guo_hall_thinning(quantized);
-    if (!stbi_write_png("out/thin.png", quantized.width, quantized.height, 4, quantized.pixels, quantized.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/thin.png\n");
-        return 1;
-    }
-
     char* svg = malloc(MAX_SVG_SIZE);
-    if (wb2svg(quantized, svg, MAX_SVG_SIZE) < 0) {
+    if (wb2svg(img, svg, MAX_SVG_SIZE) < 0) {
         fprintf(stderr, "ERROR: buffer size exceeded\n");
-        return 1;
-    } else {
-        FILE* svg_file = fopen("out/out.svg", "w");
-        fprintf(svg_file, "%s", svg);
-        fclose(svg_file);
         free(svg);
+        stbi_image_free(img.pixels);
+        return 1;
     }
 
+    FILE* svg_file = fopen("out.svg", "w");
+    fprintf(svg_file, "%s", svg);
+    fclose(svg_file);
+
+    free(svg);
     stbi_image_free(img.pixels);
-    stbi_image_free(blur.pixels);
-    stbi_image_free(quantized.pixels);
     return 0;
 }

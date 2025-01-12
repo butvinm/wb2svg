@@ -170,12 +170,10 @@ static RGBA quantized_color(RGBA rgb) {
 }
 
 
-static void quantize(Img img, Img quantized) {
-    assert(img.width == quantized.width);
-    assert(img.height == quantized.height);
+static void quantize(Img img) {
     for (int y = 0; y < img.height; ++y) {
         for (int x = 0; x < img.width; ++x) {
-            IMG_AT(quantized, y, x) = quantized_color(IMG_AT(img, y, x));
+            IMG_AT(img, y, x) = quantized_color(IMG_AT(img, y, x));
         }
     }
 }
@@ -275,19 +273,32 @@ void guo_hall_thinning(Img img) {
 #define MAX_SVG_SIZE (1 * 1024 * 1024)
 
 
+void preprocess(Img img, Img processed) {
+    assert(img.width == processed.width);
+    assert(img.height == processed.height);
+
+    gauss_filter(img, processed);
+    quantize(processed);
+    guo_hall_thinning(processed);
+}
+
+
 int wb2svg(Img img, char* buffer, int buffer_size) {
+    Img processed = img_alloc(img.width, img.height);
+    preprocess(img, processed);
+
     buffer += sprintf(
         buffer,
         "<svg width=\"%d\" height=\"%d\" xmlns=\"http://www.w3.org/2000/svg\">",
-        img.width,
-        img.height
+        processed.width,
+        processed.height
     );
-    for (int cy = 0; cy < img.height; cy++) {
-        for (int cx = 0; cx < img.width; cx++) {
-            if (IS_WHITE(IMG_AT(img, cy, cx))) {
+    for (int cy = 0; cy < processed.height; cy++) {
+        for (int cx = 0; cx < processed.width; cx++) {
+            if (IS_WHITE(IMG_AT(processed, cy, cx))) {
                 continue;
             } else {
-                IMG_AT(img, cy, cx) = WHITE;
+                IMG_AT(processed, cy, cx) = WHITE;
             }
             for (int dy = -1; dy < 2; ++dy) {
                 for (int dx = -1; dx < 2; ++dx) {
@@ -296,7 +307,7 @@ int wb2svg(Img img, char* buffer, int buffer_size) {
                     int x = cx + dx;
                     int y = cy + dy;
 
-                    if (IMG_WITHIN(img, y, x) && !IS_WHITE(IMG_AT(img, y, x))) {
+                    if (IMG_WITHIN(processed, y, x) && !IS_WHITE(IMG_AT(processed, y, x))) {
                         buffer += sprintf(
                             buffer,
                             "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"red\" stroke-width=\"2\" />",
@@ -309,6 +320,8 @@ int wb2svg(Img img, char* buffer, int buffer_size) {
         }
     }
     sprintf(buffer, "</svg>");
+
+    free(processed.pixels);
     return 0;
 }
 
