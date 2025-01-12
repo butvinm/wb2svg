@@ -1,63 +1,38 @@
+/**
+You can include only declarations:
+
+    #include "wb2svg.h"
+
+Then in single file (e.g. main.c), include implementation:
+
+    #define WB2SVG_IMPLEMENTATION
+    #include "wb2svg.h"
+
+Usage:
+    RGBA* pixels = ; // pixels from any source
+    Img img = { .pixels = pixels, .width = width, .height = height };
+
+    char* svg = malloc(SVG_SIZE);
+    if (wb2svg(img, svg, SVG_SIZE) < 0) {
+        fprintf(stderr, "ERROR: buffer size exceeded.");
+    } else {
+        printf("%s", svg);
+    }
+*/
+
+#ifndef WB2SVG_H
+#define WB2SVG_H
+
 #include <float.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#undef STB_IMAGE_IMPLEMENTATION
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-#undef STB_IMAGE_WRITE_IMPLEMENTATION
-
 
 typedef struct {
     uint8_t r, g, b, a;
 } RGBA;
-
-
-typedef struct {
-    float h; // Hue        (0.0-360.0 degrees)
-    float s; // Saturation (0.0-1.0)
-    float v; // Value      (0.0-1.0)
-} HSV;
-
-
-HSV rgb_to_hsv(RGBA rgb) {
-    HSV hsv;
-    float r = rgb.r / 255.0f;
-    float g = rgb.g / 255.0f;
-    float b = rgb.b / 255.0f;
-
-    float max = fmaxf(r, fmaxf(g, b));
-    float min = fminf(r, fminf(g, b));
-    float delta = max - min;
-
-    // Calculate Hue
-    if (delta == 0) {
-        hsv.h = 0; // Undefined hue, set to 0
-    } else if (max == r) {
-        hsv.h = 60.0f * fmodf(((g - b) / delta), 6.0f);
-    } else if (max == g) {
-        hsv.h = 60.0f * (((b - r) / delta) + 2.0f);
-    } else if (max == b) {
-        hsv.h = 60.0f * (((r - g) / delta) + 4.0f);
-    }
-
-    if (hsv.h < 0) {
-        hsv.h += 360.0f; // Ensure hue is non-negative
-    }
-
-    // Calculate Saturation
-    hsv.s = (max == 0) ? 0 : (delta / max);
-
-    // Calculate Value
-    hsv.v = max;
-
-    return hsv;
-}
 
 
 typedef struct {
@@ -81,6 +56,11 @@ Img img_alloc(int width, int height) {
     return img;
 }
 
+
+int wb2svg(Img img, char* buffer, int buffer_size);
+
+
+#ifdef WB2SVG_IMPLEMENTATION
 
 typedef struct {
     float *items;
@@ -113,6 +93,43 @@ static void mat_to_img(Mat mat, Img img) {
             IMG_AT(img, y, x) = (RGBA){ .r = item, .g = item, .b = item, .a = 255 };
         }
     }
+}
+
+
+typedef struct {
+    float h; // Hue        (0.0-360.0 degrees)
+    float s; // Saturation (0.0-1.0)
+    float v; // Value      (0.0-1.0)
+} HSV;
+
+
+HSV rgb_to_hsv(RGBA rgb) {
+    HSV hsv;
+    float r = rgb.r / 255.0f;
+    float g = rgb.g / 255.0f;
+    float b = rgb.b / 255.0f;
+
+    float max = fmaxf(r, fmaxf(g, b));
+    float min = fminf(r, fminf(g, b));
+    float delta = max - min;
+
+    if (delta == 0) {
+        hsv.h = 0;
+    } else if (max == r) {
+        hsv.h = 60.0f * fmodf(((g - b) / delta), 6.0f);
+    } else if (max == g) {
+        hsv.h = 60.0f * (((b - r) / delta) + 2.0f);
+    } else if (max == b) {
+        hsv.h = 60.0f * (((r - g) / delta) + 4.0f);
+    }
+
+    if (hsv.h < 0) {
+        hsv.h += 360.0f;
+    }
+
+    hsv.s = (max == 0) ? 0 : (delta / max);
+    hsv.v = max;
+    return hsv;
 }
 
 
@@ -235,8 +252,8 @@ void guo_hall_thinning_iteration(Img img, Mat marker, int iter) {
         }
     }
 
-    for (int y = 1; y < img.height; y++) {
-        for (int x = 1; x < img.width; x++) {
+    for (int y = 0; y < img.height; y++) {
+        for (int x = 0; x < img.width; x++) {
             if (MAT_AT(marker, y, x) == 1.0) {
                 IMG_AT(img, y, x) = WHITE;
             }
@@ -255,44 +272,45 @@ void guo_hall_thinning(Img img) {
 }
 
 
-int main(int argc, char** argv) {
-    if (argc != 2) {
-        fprintf(stderr, "USAGE: %s <file_path>\n", argv[0]);
-        return 1;
+#define MAX_SVG_SIZE (1 * 1024 * 1024)
+
+
+int wb2svg(Img img, char* buffer, int buffer_size) {
+    buffer += sprintf(
+        buffer,
+        "<svg width=\"%d\" height=\"%d\" xmlns=\"http://www.w3.org/2000/svg\">",
+        img.width,
+        img.height
+    );
+    for (int cy = 0; cy < img.height; cy++) {
+        for (int cx = 0; cx < img.width; cx++) {
+            if (IS_WHITE(IMG_AT(img, cy, cx))) {
+                continue;
+            } else {
+                IMG_AT(img, cy, cx) = WHITE;
+            }
+            for (int dy = -1; dy < 2; ++dy) {
+                for (int dx = -1; dx < 2; ++dx) {
+                    if (dy == 0 || dx == 0) continue;
+
+                    int x = cx + dx;
+                    int y = cy + dy;
+
+                    if (IMG_WITHIN(img, y, x) && !IS_WHITE(IMG_AT(img, y, x))) {
+                        buffer += sprintf(
+                            buffer,
+                            "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"red\" stroke-width=\"2\" />",
+                            cx, cy,
+                            x, y
+                        );
+                    }
+                }
+            }
+        }
     }
-
-    const char* file_path = argv[1];
-
-    int width, height;
-    RGBA* pixels = (RGBA*)stbi_load(file_path, &width, &height, NULL, 4);
-    if (pixels == NULL) {
-        fprintf(stderr, "ERROR: could not read %s\n", file_path);
-        return 1;
-    }
-    Img img = { .pixels = pixels, .width = width, .height = height };
-
-    Img blur = img_alloc(width, height);
-    gauss_filter(img, blur);
-    if (!stbi_write_png("out/gauss.png", blur.width, blur.height, 4, blur.pixels, blur.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/gauss.png\n");
-        return 1;
-    }
-
-    Img quantized = img_alloc(width, height);
-    quantize(blur, quantized);
-    if (!stbi_write_png("out/quantized.png", quantized.width, quantized.height, 4, quantized.pixels, quantized.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/quantized.png\n");
-        return 1;
-    }
-
-    guo_hall_thinning(quantized);
-    if (!stbi_write_png("out/thin.png", quantized.width, quantized.height, 4, quantized.pixels, quantized.width * sizeof(uint32_t))) {
-        fprintf(stderr, "ERROR: could not save file out/thin.png\n");
-        return 1;
-    }
-
-    stbi_image_free(img.pixels);
-    stbi_image_free(blur.pixels);
-    stbi_image_free(quantized.pixels);
+    sprintf(buffer, "</svg>");
     return 0;
 }
+
+#endif // WB2SVG_IMPLEMENTATION
+#endif // WB2SVG_H
