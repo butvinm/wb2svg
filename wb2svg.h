@@ -23,6 +23,7 @@ Usage:
 #ifndef WB2SVG_H
 #define WB2SVG_H
 
+#include <assert.h>
 #include <float.h>
 #include <math.h>
 #include <stdbool.h>
