@@ -26,15 +26,15 @@ int main(int argc, char** argv) {
     const char* file_path = argv[1];
 
     int width, height;
-    RGBA* pixels = (RGBA*)stbi_load(file_path, &width, &height, NULL, 4);
+    wb2svg_rgba* pixels = (wb2svg_rgba*)stbi_load(file_path, &width, &height, NULL, 4);
     if (pixels == NULL) {
         fprintf(stderr, "ERROR: could not read %s\n", file_path);
         return 1;
     }
-    Img img = { .pixels = pixels, .width = width, .height = height };
+    wb2svg_img img = { .pixels = pixels, .width = width, .height = height };
 
     char* svg = malloc(MAX_SVG_SIZE);
-    if (wb2svg(img, svg, MAX_SVG_SIZE) != 0) {
+    if (wb2svg_wb2svg(img, svg, MAX_SVG_SIZE) < 0) {
         fprintf(stderr, "ERROR: buffer size exceeded\n");
         free(svg);
         stbi_image_free(img.pixels);
