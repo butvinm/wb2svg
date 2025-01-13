@@ -14,7 +14,7 @@
 #include "wb2svg.h"
 
 
-#define MAX_SVG_SIZE (1 * 1024 * 1024)
+#define MAX_SVG_SIZE (5 * 1024 * 1024)
 
 
 int main(int argc, char** argv) {
