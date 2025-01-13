@@ -305,10 +305,11 @@ int wb2svg_wb2svg(wb2svg_img img, char* buffer, int buffer_size) {
                     int y = cy + dy;
 
                     if (WB2SVG__IMG_WITHIN(processed, y, x) && !WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, y, x))) {
+                        wb2svg_rgba color = WB2SVG__IMG_AT(processed, y, x);
                         wb2svg__appendf(
                             buffer, buffer_size, &cursor,
-                            "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"red\" stroke-width=\"2\" />",
-                            cx, cy, x, y
+                            "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"rgb(%d,%d,%d)\" stroke-width=\"2\" />",
+                            cx, cy, x, y, color.r, color.g, color.b
                         );
                         if (cursor < -1) WB2SVG__RETURN(cursor);
                     }
