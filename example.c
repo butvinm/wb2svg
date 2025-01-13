@@ -14,6 +14,9 @@
 #include "wb2svg.h"
 
 
+#define MAX_SVG_SIZE (1 * 1024 * 1024)
+
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "USAGE: %s <file_path>\n", argv[0]);
@@ -31,7 +34,7 @@ int main(int argc, char** argv) {
     Img img = { .pixels = pixels, .width = width, .height = height };
 
     char* svg = malloc(MAX_SVG_SIZE);
-    if (wb2svg(img, svg, MAX_SVG_SIZE) < 0) {
+    if (wb2svg(img, svg, MAX_SVG_SIZE) != 0) {
         fprintf(stderr, "ERROR: buffer size exceeded\n");
         free(svg);
         stbi_image_free(img.pixels);
