@@ -30,6 +30,10 @@ Usage:
 #include <stdlib.h>
 #include <stdint.h>
 
+#ifdef WB2SVG_DEBUG
+#undef STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#endif // WB2SVG_DEBUG
 
 typedef struct {
     uint8_t r, g, b, a;
@@ -252,6 +256,11 @@ static void wb2svg__preprocess(wb2svg_img img, wb2svg_img processed) {
     wb2svg__gauss_filter(img, processed);
     wb2svg__quantize(processed);
     wb2svg__guo_hall_thinning(processed);
+    #ifdef WB2SVG_DEBUG
+        if (!stbi_write_png("thin.png", processed.width, processed.height, 4, processed.pixels, processed.width * sizeof(uint32_t))) {
+            fprintf(stderr, "ERROR: could not save file out/thin.png\n");
+        }
+    #endif // WB2SVG_DEBUG
 }
 
 
@@ -291,33 +300,61 @@ int wb2svg_wb2svg(wb2svg_img img, char* buffer, int buffer_size) {
     );
     if (cursor < 0) WB2SVG__RETURN(cursor);
 
-    for (int cy = 0; cy < processed.height; cy++) {
-        for (int cx = 0; cx < processed.width; cx++) {
-            if (WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, cy, cx))) {
-                continue;
-            } else {
-                WB2SVG__IMG_AT(processed, cy, cx) = WB2SVG__WHITE;
-            }
-            for (int dy = -1; dy < 2; ++dy) {
-                for (int dx = -1; dx < 2; ++dx) {
-                    if (dy == 0 || dx == 0) continue;
+    bool path_emitted = false;
+    int passed_y = 0;
+    do {
+        path_emitted = false;
+        for (int cy = passed_y; cy < processed.height; ++cy) {
+            for (int cx = 0; cx < processed.width; ++cx) {
+                if (!WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, cy, cx))) {
+                    wb2svg_rgba color = WB2SVG__IMG_AT(processed, cy, cx);
+                    wb2svg__appendf(
+                        buffer, buffer_size, &cursor,
+                        "<path fill=\"none\" stroke=\"rgb(%d, %d, %d)\" d=\"M %d %d ",
+                        color.r, color.g, color.b, cx, cy
+                    );
+                    if (cursor < 0) WB2SVG__RETURN(cursor);
 
-                    int x = cx + dx;
-                    int y = cy + dy;
+                    while (!WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, cy, cx))) {
+                        WB2SVG__IMG_AT(processed, cy, cx) = WB2SVG__WHITE;
+                        for (int dy = -1; dy < 2; ++dy) {
+                            for (int dx = -1; dx < 2; ++dx) {
+                                if (dy == 0 && dx == 0) continue;
 
-                    if (WB2SVG__IMG_WITHIN(processed, y, x) && !WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, y, x))) {
-                        wb2svg_rgba color = WB2SVG__IMG_AT(processed, y, x);
-                        wb2svg__appendf(
-                            buffer, buffer_size, &cursor,
-                            "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"rgb(%d,%d,%d)\" stroke-width=\"2\" />",
-                            cx, cy, x, y, color.r, color.g, color.b
-                        );
-                        if (cursor < 0) WB2SVG__RETURN(cursor);
+                                int ny = cy + dy;
+                                int nx = cx + dx;
+                                if (!WB2SVG__IMG_WITHIN(processed, ny, nx)) continue;
+
+                                if (!WB2SVG__IS_WHITE(WB2SVG__IMG_AT(processed, ny, nx))) {
+                                    wb2svg__appendf(
+                                        buffer, buffer_size, &cursor,
+                                        "L %d %d ", nx, ny
+                                    );
+                                    if (cursor < 0) WB2SVG__RETURN(cursor);
+
+                                    cy = ny;
+                                    cx = nx;
+                                    goto next;
+                                }
+                            }
+                        }
+                        next: continue;
                     }
+
+                    wb2svg__appendf(
+                        buffer, buffer_size, &cursor,
+                        "\" />"
+                    );
+                    if (cursor < 0) WB2SVG__RETURN(cursor);
+
+                    path_emitted = true;
+                    break;
                 }
             }
+            passed_y++;
         }
-    }
+    } while (path_emitted);
+
     wb2svg__appendf(buffer, buffer_size, &cursor, "</svg>");
     if (cursor < 0) WB2SVG__RETURN(cursor);
 
